@@ -16,6 +16,7 @@ token.json
 *.sqlite3
 journal_*.csv
 *_state.csv
+last_alerts.json
 
 # python
 __pycache__/

@@ -1,0 +1,42 @@
+name: Indodax Scan (24/7)
+
+on:
+  schedule:
+    # tiap 15 menit, sepanjang hari - kripto trading 24/7 jadi gak ada jam tutup kayak IDX
+    - cron: "*/15 * * * *"
+  workflow_dispatch: {}
+
+concurrency:
+  group: indodax-scan
+  cancel-in-progress: false
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 14
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      # last_alerts.json sengaja gak masuk git - dipertahankan lewat cache biar
+      # gak kirim alert dobel buat sinyal yang sama tiap run (pola sama kayak
+      # signal.log di idx-algo-signal-surya).
+      - name: Restore last_alerts.json dari cache run sebelumnya
+        uses: actions/cache@v4
+        with:
+          path: last_alerts.json
+          key: high-tf-alerts-${{ github.run_id }}
+          restore-keys: |
+            high-tf-alerts-
+
+      - name: Scan market & kirim alert
+        env:
+          TOKEN_HIGH: ${{ secrets.TOKEN_HIGH }}
+          CHAT_ID: ${{ secrets.CHAT_ID }}
+        run: python scan_once.py

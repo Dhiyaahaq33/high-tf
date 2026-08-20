@@ -68,6 +68,8 @@ Keterangan:
 
 ## Menjalankan
 
+### Mode lokal (proses nyala terus, dashboard + bot live)
+
 ```bash
 python future_market.py
 ```
@@ -75,6 +77,20 @@ python future_market.py
 Setelah berjalan:
 - Bot Telegram akan aktif menerima command `/cek <koin>` dan mengirim alert otomatis untuk sinyal grade A+.
 - Dashboard web dapat diakses di `http://localhost:5000/` (port bisa diubah lewat environment variable `PORT`), login dengan username `admin` dan `WEB_PASSWORD` yang telah diset.
+
+Catatan Windows: kalau muncul `UnicodeEncodeError` saat startup, jalankan dengan `PYTHONIOENCODING=utf-8` (console default `cp1252` gak bisa cetak emoji yang dipakai di log).
+
+### Mode 24/7 gratis (GitHub Actions, tanpa dashboard live)
+
+`future_market.py` adalah proses persisten (Flask + bot polling nyala terus) — GitHub Actions gak bisa nahan proses kayak gitu (job dibatasi durasi, gak ada konsep "server nyala terus"). Jadi buat jalan otomatis 24/7 tanpa biaya server, dipakai `scan_once.py`: sekali jalan → scan semua market → kirim alert Telegram buat sinyal A+ yang baru berubah → exit. Dijadwalkan tiap 15 menit lewat `.github/workflows/scan.yml` (cron `*/15 * * * *`), gratis selama repo public (Actions minutes unlimited buat repo public).
+
+Konsekuensinya dashboard web dan command `/cek` interaktif **tidak tersedia** di mode ini (gak ada proses hidup buat nge-serve/nge-poll) — cuma alert Telegram otomatis yang jalan terus.
+
+Setup:
+1. Generate token bot baru dari [@BotFather](https://t.me/BotFather) kalau token lama sudah invalid.
+2. Di repo GitHub, buka **Settings → Secrets and variables → Actions**, tambahkan secret `TOKEN_HIGH` dan `CHAT_ID` (nilai sama seperti di `DATA.env`).
+3. Push ke branch `main` — workflow otomatis jalan tiap 15 menit, atau trigger manual lewat tab **Actions → Indodax Scan (24/7) → Run workflow**.
+4. State alert terakhir (`last_alerts.json`, biar gak kirim alert dobel) dipertahankan otomatis lewat `actions/cache` antar-run.
 
 ## Struktur Project
 
