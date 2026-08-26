@@ -20,6 +20,8 @@ load_dotenv("DATA.env")
 
 TOKEN = os.getenv("TOKEN_HIGH")
 CHAT_ID = os.getenv("CHAT_ID")
+SERVER_URL = os.getenv("SERVER_URL", "https://high-tf-dashboard.vercel.app")
+BOT_SECRET = os.getenv("BOT_SECRET")
 
 if not TOKEN or not CHAT_ID:
     raise ValueError("Kritis: TOKEN_HIGH / CHAT_ID belum diset (env var atau DATA.env).")
@@ -86,12 +88,14 @@ def get_market_analysis(symbol):
             tp1_raw = curr_p * (1 + base_step)
             tp2_raw = curr_p * (1 + base_step * 1.8 * power_multiplier)
             tp3_raw = curr_p * (1 + base_step * 3.5 * power_multiplier)
+            sl_raw = curr_p * (1 - base_step)  # R:R 1:1 di TP1 - bot lama gak punya SL, dipakai buat simulasi trading
         elif "DISTRIBUTION" in signal:
             tp1_raw = curr_p * (1 - base_step)
             tp2_raw = curr_p * (1 - base_step * 1.8 * power_multiplier)
             tp3_raw = curr_p * (1 - base_step * 3.5 * power_multiplier)
+            sl_raw = curr_p * (1 + base_step)
         else:
-            tp1_raw = tp2_raw = tp3_raw = curr_p
+            tp1_raw = tp2_raw = tp3_raw = sl_raw = curr_p
 
         grade = "C (LOW)"
         if "ACCUMULATION" in signal and mpi > 65 and vol_spike_ratio > 1.5:
@@ -106,6 +110,7 @@ def get_market_analysis(symbol):
             'tp1_usd': (tp1_raw / current_usd_rate) * 0.95,
             'tp2_usd': (tp2_raw / current_usd_rate) * 0.95,
             'tp3_usd': (tp3_raw / current_usd_rate) * 0.95,
+            'sl_usd': (sl_raw / current_usd_rate) * 0.95,
             'rsi': last['rsi'], 'mpi': mpi, 'signal': signal, 'vol_spike': vol_spike_ratio, 'grade': grade
         }
     except Exception as e:
@@ -128,6 +133,26 @@ def send_alert(coin_name, data):
     )
     url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
     resp = requests.post(url, data={"chat_id": CHAT_ID, "text": msg, "parse_mode": "Markdown"})
+    resp.raise_for_status()
+
+
+def send_signal_to_server(coin_name, data):
+    """Kirim sinyal A+ ke web/server.py (simulasi trading) - kalau auto-open
+    nyala di dashboard, langsung dieksekusi jadi posisi (kena guard margin-of-safety
+    di server). Kalau BOT_SECRET gak diset (mis. jalan lokal tanpa server), skip diam-diam."""
+    if not BOT_SECRET:
+        return
+    direction = "LONG" if "ACCUMULATION" in data['signal'] else "SHORT"
+    resp = requests.post(
+        f"{SERVER_URL}/signal",
+        headers={"X-Bot-Secret": BOT_SECRET},
+        json={
+            "symbol": coin_name, "direction": direction,
+            "entry": data['price_usd'], "tp": data['tp1_usd'], "sl": data['sl_usd'],
+            "grade": data['grade'],
+        },
+        timeout=15,
+    )
     resp.raise_for_status()
 
 
@@ -160,6 +185,10 @@ def main():
                     alert_count += 1
                 except Exception as e:
                     print(f"[warn] gagal kirim alert {coin_name}: {e}")
+                try:
+                    send_signal_to_server(coin_name, data)
+                except Exception as e:
+                    print(f"[warn] gagal kirim sinyal ke server {coin_name}: {e}")
                 state[coin_name] = data['signal']
         elif coin_name in state:
             del state[coin_name]

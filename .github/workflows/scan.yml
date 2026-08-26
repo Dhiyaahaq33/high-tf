@@ -44,6 +44,7 @@ jobs:
         env:
           TOKEN_HIGH: ${{ secrets.TOKEN_HIGH }}
           CHAT_ID: ${{ secrets.CHAT_ID }}
+          BOT_SECRET: ${{ secrets.BOT_SECRET }}
         run: python scan_once.py
 
       # latest_scan.json DI-commit balik ke repo (bukan cuma cache) - dashboard
