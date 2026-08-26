@@ -56,4 +56,12 @@ jobs:
           git add latest_scan.json
           git diff --staged --quiet && exit 0
           git commit -m "chore: update latest scan snapshot [skip ci]"
+          # rebase + retry - repo ini juga nerima push manual/lain di luar cron,
+          # jadi push race (non-fast-forward) mungkin kejadian, bukan cuma teori.
+          for i in 1 2 3 4 5; do
+            git push && exit 0
+            git fetch origin main
+            git rebase origin/main
+            sleep $((RANDOM % 5 + 1))
+          done
           git push
