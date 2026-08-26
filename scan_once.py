@@ -25,6 +25,7 @@ if not TOKEN or not CHAT_ID:
     raise ValueError("Kritis: TOKEN_HIGH / CHAT_ID belum diset (env var atau DATA.env).")
 
 STATE_FILE = "last_alerts.json"
+SNAPSHOT_FILE = "latest_scan.json"
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 exchange = ccxt.indodax({'enableRateLimit': True, 'verify': False})
 current_usd_rate = 16200
@@ -136,12 +137,21 @@ def main():
 
     state = load_state()
     alert_count = 0
+    snapshot = []
+    scanned_at = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
 
     for symbol in symbols:
         data = get_market_analysis(symbol)
         if data is None:
             continue
         coin_name = symbol.split('/')[0]
+
+        snapshot.append({
+            "asset": coin_name, "signal": data['signal'], "grade": data['grade'],
+            "price": f"{data['price_usd']:.8f}",
+            "tp1": f"{data['tp1_usd']:.8f}", "tp2": f"{data['tp2_usd']:.8f}", "tp3": f"{data['tp3_usd']:.8f}",
+            "rsi": f"{data['rsi']:.2f}", "mpi": f"{data['mpi']:.1f}", "vol": f"{data['vol_spike']:.1f}"
+        })
 
         if data['grade'] == "A+ (PERFECT)":
             if state.get(coin_name) != data['signal']:
@@ -155,7 +165,9 @@ def main():
             del state[coin_name]
 
     save_state(state)
-    print(f"Done. {alert_count} alert terkirim.")
+    with open(SNAPSHOT_FILE, "w", encoding="utf-8") as f:
+        json.dump({"scanned_at": scanned_at, "reports": snapshot}, f)
+    print(f"Done. {alert_count} alert terkirim. Snapshot: {len(snapshot)} assets.")
 
 
 if __name__ == "__main__":

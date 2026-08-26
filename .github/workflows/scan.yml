@@ -6,6 +6,9 @@ on:
     - cron: "*/15 * * * *"
   workflow_dispatch: {}
 
+permissions:
+  contents: write
+
 concurrency:
   group: indodax-scan
   cancel-in-progress: false
@@ -21,8 +24,10 @@ jobs:
         with:
           python-version: "3.11"
 
+      # deps buat scan_once.py doang - dipisah dari requirements.txt (itu buat
+      # setup lokal future_market.py, ikut flask/telebot yang gak kepake di sini).
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: pip install ccxt pandas requests python-dotenv
 
       # last_alerts.json sengaja gak masuk git - dipertahankan lewat cache biar
       # gak kirim alert dobel buat sinyal yang sama tiap run (pola sama kayak
@@ -40,3 +45,15 @@ jobs:
           TOKEN_HIGH: ${{ secrets.TOKEN_HIGH }}
           CHAT_ID: ${{ secrets.CHAT_ID }}
         run: python scan_once.py
+
+      # latest_scan.json DI-commit balik ke repo (bukan cuma cache) - dashboard
+      # live di Vercel baca file ini langsung dari GitHub raw content, jadi
+      # perlu nempel di riwayat repo, bukan cuma bertahan antar-run Actions.
+      - name: Commit latest_scan.json buat dashboard live
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add latest_scan.json
+          git diff --staged --quiet && exit 0
+          git commit -m "chore: update latest scan snapshot [skip ci]"
+          git push
